@@ -1,0 +1,125 @@
+﻿@page "/chat"
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager Navigation
+@rendermode InteractiveAuto
+
+<style>
+    .bubble {
+        padding: 0.75rem 1rem;
+        border-radius: 1rem;
+        max-width: 75%;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .me {
+        justify-content: end;
+    }
+
+        .me .bubble {
+            background-color: #d0ebff;
+            color: #084298;
+        }
+
+    .assistant {
+        justify-content: start;
+    }
+
+        .assistant .bubble {
+            background-color: #f1f3f5;
+            color: #343a40;
+        }
+</style>
+
+<div class="container py-4">
+    <!-- Chat container -->
+    <div class="card mb-4" style="max-height: 500px; overflow-y: auto;">
+        <div class="card-body">
+            @foreach (var msg in messages)
+            {
+                <div class="mb-3 d-flex @(msg.User == "Me" ? "me" : "assistant")">
+                    <div class="bubble">
+                        @if (msg.User != "Assistant")
+                        {
+                            <strong class="d-block text-sm">@msg.User:</strong>
+                        }
+                        <span class="fs-5">@msg.Text</span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Input container -->
+    <div class="input-group">
+        <input @bind="inputMessage" @bind:event="oninput"
+               class="form-control"
+               placeholder="Escribe un mensaje..." />
+        <button @onclick="SendMessage"
+                class="btn btn-primary">
+            Enviar
+        </button>
+    </div>
+</div>
+
+@code {
+    private HubConnection? hubConnection;
+    private string inputMessage = string.Empty;
+    private List<ChatMessage> messages = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/chathub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            hubConnection.On<string, string>("ReceiveMessage", (user, message) =>
+            {
+                // Solo agregamos mensajes de "Assistant" para evitar duplicados
+                if (user != "Me")
+                {
+                    messages.Add(new ChatMessage(user, message));
+                    InvokeAsync(StateHasChanged);
+                }
+            });
+
+            // Manejo de cierre de conexión
+            hubConnection.Closed += async (error) =>
+            {
+                Console.WriteLine($"[SignalR] Conexión cerrada: {error?.Message}");
+            };
+
+            // Iniciamos la conexión
+            await hubConnection.StartAsync();
+            Console.WriteLine("[SignalR] Conexión establecida.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SignalR] Error al iniciar conexión: {ex.Message}");
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(inputMessage)) return;
+
+        try
+        {
+            // Agrega el mensaje con el usuario local "Me"
+            messages.Add(new ChatMessage("Me", inputMessage));
+            // Enviar mensaje al servidor, asumimos que el servidor responde como "Assistant"
+            await hubConnection!.SendAsync("SendMessage", "Assistant", inputMessage);
+            inputMessage = string.Empty;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SignalR] Error al enviar mensaje: {ex.Message}");
+        }
+    }
+
+    // Modelo para el mensaje del chat
+    record ChatMessage(string User, string Text);
+}
