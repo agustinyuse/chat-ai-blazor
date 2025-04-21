@@ -1,5 +1,7 @@
+using BlazorApp1;
 using BlazorApp1.Components;
 using Chat.AI.ChatHub;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +9,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddInteractiveWebAssemblyComponents();
+
+builder.Services.AddSignalR(hubOptions =>
+{
+    hubOptions.AddFilter<ErrorHandlingFilter>();
+});
 
 var app = builder.Build();
 
